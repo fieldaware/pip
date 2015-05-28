@@ -34,6 +34,7 @@ from pip.utils.filesystem import check_path_owner
 from pip.utils.logging import indent_log
 from pip.utils.ui import DownloadProgressBar, DownloadProgressSpinner
 from pip.locations import write_delete_marker_file
+from pip.s3 import get_url_for_s3_path
 from pip.vcs import vcs
 from pip._vendor import requests, six
 from pip._vendor.requests.adapters import BaseAdapter, HTTPAdapter
@@ -369,6 +370,9 @@ class PipSession(requests.Session):
         # Allow setting a default timeout on a session
         kwargs.setdefault("timeout", self.timeout)
 
+        if url.startswith('s3'):
+            url = get_url_for_s3_path(url)
+
         # Dispatch the actual request
         return super(PipSession, self).request(method, url, *args, **kwargs)
 
@@ -400,6 +404,9 @@ def get_file_content(url, comes_from=None, session=None):
                 path = '/' + path.lstrip('/')
             url = path
         else:
+            if scheme == "s3":
+                print url
+                url = get_url_for_s3_path(url)
             # FIXME: catch some errors
             resp = session.get(url)
             resp.raise_for_status()
@@ -418,7 +425,7 @@ def get_file_content(url, comes_from=None, session=None):
     return url, content
 
 
-_scheme_re = re.compile(r'^(http|https|file):', re.I)
+_scheme_re = re.compile(r'^(http|https|file|s3):', re.I)
 _url_slash_drive_re = re.compile(r'/*([a-z])\|', re.I)
 
 
@@ -427,7 +434,7 @@ def is_url(name):
     if ':' not in name:
         return False
     scheme = name.split(':', 1)[0].lower()
-    return scheme in ['http', 'https', 'file', 'ftp'] + vcs.all_schemes
+    return scheme in ['http', 'https', 'file', 'ftp', 's3'] + vcs.all_schemes
 
 
 def url_to_path(url):

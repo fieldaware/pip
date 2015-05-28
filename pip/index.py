@@ -29,6 +29,7 @@ from pip.download import HAS_TLS, url_to_path, path_to_url
 from pip.models import PyPI
 from pip.wheel import Wheel, wheel_ext
 from pip.pep425tags import supported_tags, supported_tags_noarch, get_platform
+from pip.s3 import list_s3_path
 from pip._vendor import html5lib, requests, pkg_resources, six
 from pip._vendor.packaging.version import parse as parse_version
 from pip._vendor.requests.exceptions import SSLError
@@ -41,6 +42,7 @@ __all__ = ['FormatControl', 'fmt_ctl_handle_mutual_exclude', 'PackageFinder']
 SECURE_ORIGINS = [
     # protocol, hostname, port
     ("https", "*", "*"),
+    ("s3", "*", "*"),
     ("*", "localhost", "*"),
     ("*", "127.0.0.0/8", "*"),
     ("*", "::1/128", "*"),
@@ -921,14 +923,17 @@ class HTMLPage(object):
                 url = urllib_parse.urljoin(url, 'index.html')
                 logger.debug(' file: URL is directory, getting %s', url)
 
-            resp = session.get(
-                url,
-                headers={
-                    "Accept": "text/html",
-                    "Cache-Control": "max-age=600",
-                },
-            )
-            resp.raise_for_status()
+            if scheme == "s3":
+                resp = list_s3_path(url)
+            else:
+                resp = session.get(
+                    url,
+                    headers={
+                        "Accept": "text/html",
+                        "Cache-Control": "max-age=600",
+                    },
+                )
+                resp.raise_for_status()
 
             # The check for archives above only works if the url ends with
             #   something that looks like an archive. However that is not a
@@ -973,7 +978,7 @@ class HTMLPage(object):
     def _get_content_type(url, session):
         """Get the Content-Type of the given url, using a HEAD request"""
         scheme, netloc, path, query, fragment = urllib_parse.urlsplit(url)
-        if scheme not in ('http', 'https'):
+        if scheme not in ('http', 'https', 's3'):
             # FIXME: some warning or something?
             # assertion error?
             return ''
